@@ -33,8 +33,6 @@ int main(){
         return 1;
     }
 
-    printf("Connected to server!\n");
-
     const char *msg = "Hello from client!";
 
     ssize_t bytes_sent = send(client_fd, msg, strlen(msg), 0);
@@ -63,6 +61,10 @@ int main(){
         printf("Received from server: %s\n", buffer);
     }
 
+    // client central loop
+    while(1){
+
+    }
 
     close(client_fd);
     

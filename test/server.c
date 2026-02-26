@@ -1,5 +1,3 @@
-// Just playing with sockets and learning more about how they work.
-// For anyone reading this log, I'm a data scientist cut me some slack.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +10,7 @@ const int PORT_NUMBER = 42069;
 const int BUFFER_SIZE = 1024;
 const int BACKLOG = 20;
 const int MAX_CONNECTIONS = 20;
+const int MAX_CONNECTIONS_PENDING = 4;
 
 int done[MAX_CONNECTIONS];
 pthread_mutex_t done_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -52,9 +51,13 @@ void* client_handler(void* arg){
         close(client_fd);
         return NULL;
     }    
-    printf("REPLIED");
+
+    // Server central activity loop
+    while(1){
+
+    }
+    
     close(client_fd);
-    printf("CLOSED");
 
     pthread_mutex_lock(&done_mutex);
         done[info.id] = 1;
@@ -87,7 +90,7 @@ int main(){
 
     printf("Bind successful on port 0x%x\n", PORT_NUMBER);
 
-    if (listen(server_fd, MAX_CONNECTIONS) == -1) {
+    if (listen(server_fd, MAX_CONNECTIONS_PENDING) == -1) {
         perror("listen");
         close(server_fd);
         return 1;
@@ -97,9 +100,12 @@ int main(){
 
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
-    pthread_t thread[5];
-    int i = 0;
-    while(1 == 1){
+    pthread_t thread[MAX_CONNECTIONS];
+
+    int started[MAX_CONNECTIONS];
+    memset(&started, 0x0, sizeof(int)*MAX_CONNECTIONS);
+
+    while(1){
 
         int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
         if (client_fd == -1) {
@@ -114,6 +120,26 @@ int main(){
             close(client_fd);
             continue;
         }
+        int i = -1;
+        for(int k = 0; k < MAX_CONNECTIONS; k++){
+            if(started[k] == 0){
+                started[k] = 1;
+                i = k;
+                break;
+            }
+        }
+        if(i == -1){
+            const char *reply = "Maximum connections reached!";
+            if (send(client_fd, reply, strlen(reply), 0) == -1) {
+                perror("Failed to send disconnect");
+                close(client_fd);
+                continue;
+            }    
+            close(client_fd);
+            continue;
+        }
+
+        printf("New thread at id %d\n", i);
 
         client_info->id = i;
         client_info->client_fd = client_fd;
@@ -123,17 +149,15 @@ int main(){
             perror("pthread_create failed");
             return 1;
         }
-        printf("here");
 
-        for(int j = 0; j < 5; j++){
+        for(int j = 0; j < MAX_CONNECTIONS; j++){
             if(done[j] == 1){
                 pthread_join(thread[j], NULL);
+                done[j] = 0; // Should be impossible for any thread to use done
+                started[j] = 0;
                 printf("Joined and exiting\n");
             }
         }
-        printf("iter");
-        i++;
-        printf("%d", i);
     }
     
     close(server_fd);
